@@ -1,6 +1,8 @@
 package broadcast
 
-import "time"
+import (
+	"time"
+)
 
 type HandleFunc func(dst string, message float64) error
 
@@ -42,6 +44,7 @@ func (q *Queue) Enqueue(dst string, message float64) {
 func (q *Queue) Run(workers int) {
 	for i := 0; i < workers; i++ {
 		go func() {
+			ticker := time.NewTicker(100 * time.Millisecond)
 			for {
 				select {
 				case req := <-q.reqQueue:
@@ -63,6 +66,8 @@ func (q *Queue) Run(workers int) {
 						q.reqQueue <- res.req
 					}
 				}
+
+				<-ticker.C
 			}
 		}()
 	}
