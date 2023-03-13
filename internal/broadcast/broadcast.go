@@ -1,5 +1,7 @@
 package broadcast
 
+import "time"
+
 type HandleFunc func(dst string, message float64) error
 
 type request struct {
@@ -8,8 +10,9 @@ type request struct {
 }
 
 type result struct {
-	req *request
-	err error
+	req        *request
+	err        error
+	queueAfter time.Time
 }
 
 type Queue struct {
@@ -23,7 +26,7 @@ func NewQueue(handler HandleFunc) *Queue {
 	return &Queue{
 		handler:  handler,
 		reqQueue: make(chan *request, 100),
-		resQueue: make(chan *result, 100),
+		resQueue: make(chan *result, 1000),
 	}
 }
 
@@ -43,11 +46,20 @@ func (q *Queue) Run(workers int) {
 				select {
 				case req := <-q.reqQueue:
 					q.resQueue <- &result{
-						req: req,
-						err: q.handler(req.dst, req.message),
+						req: &request{
+							dst:     req.dst,
+							message: req.message,
+						},
+						err:        q.handler(req.dst, req.message),
+						queueAfter: time.Now().Add(3 * time.Second),
 					}
 				case res := <-q.resQueue:
 					if res.err != nil {
+						if res.queueAfter.After(time.Now()) {
+							q.resQueue <- res
+							continue
+						}
+
 						q.reqQueue <- res.req
 					}
 				}
